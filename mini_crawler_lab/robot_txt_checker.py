@@ -25,19 +25,25 @@ class RobotsTxtFetchError(RobotsTxtError):
 
 @dataclass(frozen=True)
 class RobotsRule:
+    """Single Allow or Disallow directive from robots.txt."""
+
     directive: str
     path: str
 
     def to_dict(self) -> Dict[str, str]:
+        """Serialize the rule to a JSON-compatible dictionary."""
         return {"directive": self.directive, "path": self.path}
 
 
 @dataclass(frozen=True)
 class RobotsGroup:
+    """Robots.txt group containing user agents and their rules."""
+
     user_agents: List[str]
     rules: List[RobotsRule]
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the group and nested rules to plain containers."""
         return {
             "user_agents": list(self.user_agents),
             "rules": [rule.to_dict() for rule in self.rules],
@@ -46,6 +52,8 @@ class RobotsGroup:
 
 @dataclass(frozen=True)
 class RobotsTxt:
+    """Parsed robots.txt document with matching helpers."""
+
     domain: str
     url: str
     groups: List[RobotsGroup]
@@ -54,6 +62,7 @@ class RobotsTxt:
     fetched_at_ms: float
 
     def can_fetch(self, user_agent: str, url_or_path: str) -> bool:
+        """Return whether a user agent may fetch a URL or path."""
         path = self._request_path(url_or_path)
         rules = self._rules_for_user_agent(user_agent)
         if not rules:
@@ -68,6 +77,7 @@ class RobotsTxt:
         return best.directive == "allow"
 
     def to_dict(self, include_raw_text: bool = False) -> Dict[str, object]:
+        """Serialize parsed robots.txt data for storage or reporting."""
         data: Dict[str, object] = {
             "domain": self.domain,
             "url": self.url,
@@ -80,6 +90,7 @@ class RobotsTxt:
         return data
 
     def summary(self) -> str:
+        """Return a compact human-readable robots.txt summary."""
         lines = [
             f"domain: {self.domain}",
             f"url: {self.url}",
@@ -92,6 +103,7 @@ class RobotsTxt:
         return "\n".join(lines)
 
     def _rules_for_user_agent(self, user_agent: str) -> List[RobotsRule]:
+        """Select rules from the most specific matching user-agent group."""
         normalized = user_agent.lower()
         matching_groups = [
             group
@@ -119,11 +131,13 @@ class RobotsTxt:
 
     @staticmethod
     def _user_agent_matches(user_agent: str, agent: str) -> bool:
+        """Return whether a robots user-agent token matches this crawler."""
         normalized_agent = agent.lower()
         return normalized_agent == "*" or normalized_agent in user_agent
 
     @staticmethod
     def _request_path(url_or_path: str) -> str:
+        """Convert a full URL or path into the request path used by robots."""
         parsed = urlparse(url_or_path)
         if parsed.scheme or parsed.netloc:
             path = parsed.path or "/"
@@ -132,10 +146,12 @@ class RobotsTxt:
 
     @staticmethod
     def _normalized_path(path: str) -> str:
+        """Percent-encode a request path while preserving robots wildcards."""
         return quote(path, safe="/:%?=&;,+~*$")
 
     @staticmethod
     def _rule_matches(rule: RobotsRule, path: str) -> bool:
+        """Return whether a robots rule pattern applies to a path."""
         if rule.directive == "disallow" and rule.path == "":
             return False
 
@@ -149,6 +165,8 @@ class RobotsTxt:
 
 
 class RobotTxtChecker:
+    """Fetch, parse, and optionally store robots.txt documents."""
+
     def __init__(
         self,
         timeout: float = 10.0,
@@ -157,6 +175,7 @@ class RobotTxtChecker:
         transport: Optional[httpx.BaseTransport] = None,
         storage_dir: Optional[Union[str, Path]] = None,
     ) -> None:
+        """Configure HTTP defaults and optional on-disk robots storage."""
         self.timeout = timeout
         self.headers = dict(headers or {})
         self.follow_redirects = follow_redirects
@@ -164,6 +183,7 @@ class RobotTxtChecker:
         self.storage_dir = Path(storage_dir) if storage_dir is not None else None
 
     def fetch(self, domain: str, store: bool = False) -> RobotsTxt:
+        """Fetch and parse robots.txt for a domain."""
         robots_url = self.robots_url(domain)
         started_at = perf_counter()
 
@@ -204,6 +224,7 @@ class RobotTxtChecker:
         url: Optional[str] = None,
         fetched_at_ms: float = 0.0,
     ) -> RobotsTxt:
+        """Parse robots.txt text into groups, rules, and sitemap entries."""
         groups: List[RobotsGroup] = []
         sitemaps: List[str] = []
         current_agents: List[str] = []
@@ -250,6 +271,7 @@ class RobotTxtChecker:
         )
 
     def store(self, robots_txt: RobotsTxt, path: Optional[Union[str, Path]] = None) -> Path:
+        """Persist a parsed robots.txt document as JSON and return its path."""
         target = Path(path) if path is not None else self._default_storage_path(robots_txt.domain)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
@@ -260,6 +282,7 @@ class RobotTxtChecker:
 
     @classmethod
     def robots_url(cls, domain: str) -> str:
+        """Build the canonical robots.txt URL for a domain or origin."""
         parsed = urlparse(domain if "://" in domain else f"https://{domain}")
         scheme = parsed.scheme or "https"
         netloc = parsed.netloc or parsed.path
@@ -267,20 +290,24 @@ class RobotTxtChecker:
 
     @classmethod
     def _domain_key(cls, domain: str) -> str:
+        """Normalize a domain or origin into the storage/cache key."""
         parsed = urlparse(domain if "://" in domain else f"https://{domain}")
         return (parsed.netloc or parsed.path).lower()
 
     @staticmethod
     def _strip_comment(line: str) -> str:
+        """Remove the comment suffix from one robots.txt line."""
         return line.split("#", 1)[0]
 
     @staticmethod
     def _normalize_rule_path(path: str) -> str:
+        """Normalize a rule path without turning robots wildcards opaque."""
         if path == "":
             return ""
         return quote(path, safe="/:%?=&;,+~*$")
 
     def _default_storage_path(self, domain: str) -> Path:
+        """Return the default JSON path for a stored robots.txt document."""
         if self.storage_dir is None:
             raise RobotsTxtError("storage_dir is required when store=True and no path is given")
         safe_domain = domain.replace(":", "_").replace("/", "_")

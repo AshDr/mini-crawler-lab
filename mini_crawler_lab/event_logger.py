@@ -8,10 +8,14 @@ from .crawl_event import CrawlEvent
 
 
 class EventLogger:
+    """Append crawler events to JSON Lines and summarize them later."""
+
     def __init__(self, path: Union[str, Path]) -> None:
+        """Create a logger for the given JSON Lines file path."""
         self.path = Path(path)
 
     def log(self, event: CrawlEvent) -> None:
+        """Append one crawl event as a JSON line."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as file:
             json.dump(event.to_dict(), file, ensure_ascii=False)
@@ -19,6 +23,7 @@ class EventLogger:
 
     @staticmethod
     def summarize(log_file: Union[str, Path]) -> Dict[str, Any]:
+        """Compute basic success and latency counters from an event log."""
         total = 0
         successful = 0
         status_403 = 0
@@ -74,6 +79,7 @@ class EventLogger:
 
 
 def summarize(log_file: Union[str, Path]) -> Dict[str, Any]:
+    """Convenience wrapper around EventLogger.summarize."""
     return EventLogger.summarize(log_file)
 
 
@@ -85,6 +91,7 @@ def _summary(
     timeout: int,
     average_elapsed_ms: float,
 ) -> Dict[str, Any]:
+    """Build a normalized summary dictionary from aggregate counters."""
     success_rate = successful / total if total else 0.0
     return {
         "total": total,

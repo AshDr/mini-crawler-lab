@@ -49,6 +49,7 @@ def crawl_static_site(
     same_host_only: bool = True,
     user_agent: str = DEFAULT_USER_AGENT,
 ) -> Dict[str, Any]:
+    """Synchronously crawl a small static site and return a run report."""
     if max_pages < 1:
         raise ValueError("max_pages must be greater than 0")
 
@@ -87,6 +88,7 @@ async def _crawl_static_site(
     same_host_only: bool,
     user_agent: str,
 ) -> Dict[str, Any]:
+    """Run the crawler loop with injectable collaborators for testing."""
     started_at = perf_counter()
     started_at_utc = _utc_now()
     output_path = Path(output_dir) if output_dir is not None else _default_output_dir()
@@ -275,6 +277,7 @@ async def _can_fetch(
     robots_checker: RobotTxtChecker,
     rate_limiter: RateLimiter,
 ) -> Tuple[bool, bool]:
+    """Check robots.txt permission and report whether a robots fetch failed."""
     if origin not in robots_cache:
         await rate_limiter.acquire(origin)
         try:
@@ -289,6 +292,7 @@ async def _can_fetch(
 
 
 def _save_html(raw_html_dir: Path, url: str, html: str) -> Path:
+    """Save raw HTML under a deterministic URL hash filename."""
     raw_html_dir.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
     path = raw_html_dir / f"{digest}.html"
@@ -297,28 +301,34 @@ def _save_html(raw_html_dir: Path, url: str, html: str) -> Path:
 
 
 def _host(url: str) -> str:
+    """Return the lowercase network location for a URL."""
     return (urlparse(url).netloc or "").lower()
 
 
 def _origin(url: str) -> str:
+    """Return the lowercase scheme and network location for a URL."""
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}".lower()
 
 
 def _is_http_url(url: str) -> bool:
+    """Return whether a URL is absolute HTTP or HTTPS."""
     return urlparse(url).scheme in {"http", "https"} and bool(_host(url))
 
 
 def _utc_now() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(timezone.utc).isoformat()
 
 
 def _default_output_dir() -> Path:
+    """Return the timestamped default crawl output directory."""
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return Path("data") / "crawls" / stamp
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line argument parser."""
     parser = argparse.ArgumentParser(description="Crawl a small static site.")
     parser.add_argument("seed_url")
     parser.add_argument("max_pages", type=int)
@@ -334,6 +344,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Parse CLI arguments, run the crawl, and print the JSON report."""
     args = _build_arg_parser().parse_args()
     report = crawl_static_site(
         args.seed_url,

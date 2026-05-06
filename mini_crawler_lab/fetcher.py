@@ -9,6 +9,8 @@ import httpx
 
 @dataclass(frozen=True)
 class FetchResult:
+    """Result returned by an HTTP fetch attempt."""
+
     url: str
     final_url: Optional[str]
     status_code: Optional[int]
@@ -19,6 +21,8 @@ class FetchResult:
 
 
 class HttpFetcher:
+    """Small synchronous HTTP client wrapper used by the crawler."""
+
     def __init__(
         self,
         timeout: float = 10.0,
@@ -26,6 +30,7 @@ class HttpFetcher:
         follow_redirects: bool = True,
         transport: Optional[httpx.BaseTransport] = None,
     ) -> None:
+        """Configure request defaults and an optional test transport."""
         self.timeout = timeout
         self.headers = dict(headers or {})
         self.follow_redirects = follow_redirects
@@ -36,6 +41,7 @@ class HttpFetcher:
         url: str,
         headers: Optional[Mapping[str, str]] = None,
     ) -> FetchResult:
+        """Fetch a URL and convert success or failure into a FetchResult."""
         started_at = perf_counter()
         request_headers = dict(headers or {})
 
@@ -70,10 +76,12 @@ class HttpFetcher:
 
     @staticmethod
     def _elapsed_ms(started_at: float) -> float:
+        """Return elapsed wall-clock time in milliseconds."""
         return (perf_counter() - started_at) * 1000
 
     @staticmethod
     def _error_type(exc: Exception) -> str:
+        """Map httpx exceptions to stable crawler error labels."""
         if isinstance(exc, httpx.TimeoutException):
             return "timeout"
         if isinstance(exc, (httpx.InvalidURL, httpx.UnsupportedProtocol)):
