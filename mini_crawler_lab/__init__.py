@@ -1,6 +1,6 @@
 from .crawl_event import CrawlEvent
 from .event_logger import EventLogger, summarize
-from .fetcher import FetchResult, HttpFetcher
+from .fetcher import FetchResult, HttpFetcher, RenderFetcher, RenderResult
 from .domain_rate_limiter import DomainRateLimiter
 from .parser import HTMLParser, ParsedPage
 from .robot_txt_checker import (
@@ -35,6 +35,8 @@ __all__ = [
     "RobotsTxtError",
     "RobotsTxtFetchError",
     "RobotsTxtNotFoundError",
+    "RenderFetcher",
+    "RenderResult",
     "SeenUrlStore",
     "SQLiteUrlFrontier",
     "URLNormalizer",

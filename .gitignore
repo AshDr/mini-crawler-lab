@@ -3,5 +3,6 @@ __pycache__/
 .pycache/
 .uv-cache/
 .venv/
+data/
 *.py[cod]
 *.egg-info/

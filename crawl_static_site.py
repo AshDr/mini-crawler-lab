@@ -71,7 +71,7 @@ def crawl_static_site(
         )
     )
 
-
+# 处理单个host的结果
 async def _crawl_static_site(
     seed_url: str,
     max_pages: int,
@@ -240,7 +240,7 @@ async def _crawl_static_site(
                     stats["links_enqueued"] += 1
                 else:
                     stats["duplicates_skipped"] += 1
-
+            # 当前页面的所有链接都处理完了，标记为 done
             frontier.mark_done(current_url)
     finally:
         frontier.close()

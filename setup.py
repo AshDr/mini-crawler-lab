@@ -8,5 +8,8 @@ setup(
     packages=find_packages(),
     python_requires=">=3.9",
     install_requires=["httpx>=0.27"],
-    extras_require={"test": ["pytest>=8"]},
+    extras_require={
+        "render": ["playwright>=1.48"],
+        "test": ["pytest>=8"],
+    },
 )
