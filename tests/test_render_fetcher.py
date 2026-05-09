@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from mini_crawler_lab import RenderFetcher, RenderResult
 
@@ -16,12 +16,15 @@ class FakePage:
         html: str = "<html></html>",
         response: Optional[FakeResponse] = None,
         error: Optional[Exception] = None,
+        request_resource_types: Optional[List[str]] = None,
     ):
         self.url = "about:blank"
         self.final_url = final_url
         self.html = html
         self.response = response
         self.error = error
+        self.context: Optional["FakeContext"] = None
+        self.request_resource_types = request_resource_types or ["document"]
         self.goto_calls = []
         self.wait_calls = []
 
@@ -37,6 +40,10 @@ class FakePage:
         if self.error is not None:
             raise self.error
 
+        if self.context is not None:
+            for resource_type in self.request_resource_types:
+                self.context.dispatch_route(resource_type)
+
         self.url = self.final_url
         return self.response
 
@@ -51,13 +58,45 @@ class FakeContext:
     def __init__(self, page: FakePage, extra_http_headers: Dict[str, str]):
         self.page = page
         self.extra_http_headers = extra_http_headers
+        self.route_calls = []
+        self.continued_resource_types: List[str] = []
+        self.aborted_resource_types: List[str] = []
+        self.route_handler: Optional[Callable[["FakeRoute"], None]] = None
         self.closed = False
 
     def new_page(self) -> FakePage:
+        self.page.context = self
         return self.page
+
+    def route(self, pattern: str, handler: Callable[["FakeRoute"], None]) -> None:
+        self.route_calls.append({"pattern": pattern})
+        self.route_handler = handler
+
+    def dispatch_route(self, resource_type: str) -> None:
+        if self.route_handler is None:
+            return
+
+        self.route_handler(FakeRoute(self, resource_type))
 
     def close(self) -> None:
         self.closed = True
+
+
+class FakeRequest:
+    def __init__(self, resource_type: str):
+        self.resource_type = resource_type
+
+
+class FakeRoute:
+    def __init__(self, context: FakeContext, resource_type: str):
+        self.context = context
+        self.request = FakeRequest(resource_type)
+
+    def abort(self) -> None:
+        self.context.aborted_resource_types.append(self.request.resource_type)
+
+    def continue_(self) -> None:
+        self.context.continued_resource_types.append(self.request.resource_type)
 
 
 class FakeBrowser:
@@ -113,12 +152,18 @@ def test_render_fetcher_reuses_browser_and_creates_context_per_fetch() -> None:
     assert result_one.final_url == "https://example.com/one"
     assert result_one.status_code == 200
     assert result_one.headers["content-type"] == "text/html"
+    assert result_one.html == "<html>one</html>"
     assert result_one.text == "<html>one</html>"
     assert result_one.error_type is None
     assert result_one.elapsed_ms >= 0
+    assert result_one.request_count == 1
+    assert result_one.blocked_count == 0
     assert result_two.final_url == "https://example.com/two"
     assert result_two.status_code == 201
+    assert result_two.html == "<html>two</html>"
     assert result_two.text == "<html>two</html>"
+    assert result_two.request_count == 1
+    assert result_two.blocked_count == 0
     assert len(browser.contexts) == 2
     assert browser.contexts[0] is not browser.contexts[1]
     assert browser.contexts[0].closed
@@ -127,6 +172,44 @@ def test_render_fetcher_reuses_browser_and_creates_context_per_fetch() -> None:
         "user-agent": "mini-crawler",
         "x-trace-id": "request-1",
     }
+    assert browser.contexts[0].route_calls == [{"pattern": "**/*"}]
+
+
+def test_render_fetcher_blocks_configured_resource_types() -> None:
+    page = FakePage(
+        response=FakeResponse(),
+        request_resource_types=["document", "image", "font", "script", "media"],
+    )
+    browser = FakeBrowser([page])
+    fetcher = RenderFetcher(
+        browser=browser,
+        block_resource_types=["image", "font", "media"],
+    )
+
+    result = fetcher.fetch("https://example.com/")
+
+    assert result.error_type is None
+    assert result.request_count == 5
+    assert result.blocked_count == 3
+    assert browser.contexts[0].aborted_resource_types == ["image", "font", "media"]
+    assert browser.contexts[0].continued_resource_types == ["document", "script"]
+
+
+def test_render_fetcher_allows_per_fetch_resource_type_override() -> None:
+    page = FakePage(
+        response=FakeResponse(),
+        request_resource_types=["document", "image", "font"],
+    )
+    browser = FakeBrowser([page])
+    fetcher = RenderFetcher(browser=browser, block_resource_types=["image"])
+
+    result = fetcher.fetch("https://example.com/", block_resource_types=["font"])
+
+    assert result.error_type is None
+    assert result.request_count == 3
+    assert result.blocked_count == 1
+    assert browser.contexts[0].aborted_resource_types == ["font"]
+    assert browser.contexts[0].continued_resource_types == ["document", "image"]
 
 
 def test_render_fetcher_waits_for_selector() -> None:
@@ -150,6 +233,8 @@ def test_render_fetcher_returns_error_type_and_closes_context() -> None:
     assert result.final_url is None
     assert result.headers == {}
     assert result.text is None
+    assert result.request_count == 0
+    assert result.blocked_count == 0
     assert result.error_type == "timeout"
     assert result.elapsed_ms >= 0
     assert browser.contexts[0].closed

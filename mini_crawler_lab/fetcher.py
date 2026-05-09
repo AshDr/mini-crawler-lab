@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional, Set
 
 import httpx
 
@@ -28,9 +28,16 @@ class RenderResult:
     final_url: Optional[str]
     status_code: Optional[int]
     headers: Dict[str, str]
-    text: Optional[str]
+    html: Optional[str]
     elapsed_ms: float
     error_type: Optional[str]
+    request_count: int = 0
+    blocked_count: int = 0
+
+    @property
+    def text(self) -> Optional[str]:
+        """Backward-compatible alias for rendered HTML."""
+        return self.html
 
 
 class HttpFetcher:
@@ -116,6 +123,7 @@ class RenderFetcher:
         browser_name: str = "chromium",
         headless: bool = True,
         wait_until: str = "networkidle",
+        block_resource_types: Optional[Iterable[str]] = None,
         browser: Optional[Any] = None,
         playwright: Optional[Any] = None,
     ) -> None:
@@ -125,6 +133,7 @@ class RenderFetcher:
         self.browser_name = browser_name
         self.headless = headless
         self.wait_until = wait_until
+        self.block_resource_types = self._normalize_resource_types(block_resource_types)
         self._browser = browser
         self._playwright = playwright
 
@@ -133,10 +142,12 @@ class RenderFetcher:
         url: str,
         headers: Optional[Mapping[str, str]] = None,
         wait_for_selector: Optional[str] = None,
+        block_resource_types: Optional[Iterable[str]] = None,
     ) -> RenderResult:
         """Render a URL in a fresh browser context and return the page HTML."""
         started_at = perf_counter()
         context = None
+        request_stats = {"total": 0, "blocked": 0}
 
         try:
             # Get a PlayWright browser instance, starting Playwright if needed, and reuse it across fetches
@@ -145,6 +156,12 @@ class RenderFetcher:
             context = browser.new_context(
                 extra_http_headers=self._headers_for_request(headers),
             )
+            active_block_types = (
+                self.block_resource_types
+                if block_resource_types is None
+                else self._normalize_resource_types(block_resource_types)
+            )
+            self._install_request_route(context, active_block_types, request_stats)
             page = context.new_page()
             response = page.goto(
                 url,
@@ -160,9 +177,11 @@ class RenderFetcher:
                 final_url=page.url,
                 status_code=None if response is None else response.status,
                 headers={} if response is None else dict(response.headers),
-                text=page.content(),
+                html=page.content(),
                 elapsed_ms=self._elapsed_ms(started_at),
                 error_type=None,
+                request_count=request_stats["total"],
+                blocked_count=request_stats["blocked"],
             )
         except Exception as exc:
             return RenderResult(
@@ -170,9 +189,11 @@ class RenderFetcher:
                 final_url=None,
                 status_code=None,
                 headers={},
-                text=None,
+                html=None,
                 elapsed_ms=self._elapsed_ms(started_at),
                 error_type=self._error_type(exc),
+                request_count=request_stats["total"],
+                blocked_count=request_stats["blocked"],
             )
         finally:
             self._close_context(context)
@@ -209,6 +230,47 @@ class RenderFetcher:
         request_headers = dict(self.headers)
         request_headers.update(headers or {})
         return request_headers
+
+    @classmethod
+    def _normalize_resource_types(
+        cls,
+        resource_types: Optional[Iterable[str]],
+    ) -> Set[str]:
+        """Normalize Playwright resource type names for route matching."""
+        return {resource_type.lower() for resource_type in resource_types or ()}
+
+    @classmethod
+    def _install_request_route(
+        cls,
+        context: Any,
+        block_resource_types: Set[str],
+        request_stats: Dict[str, int],
+    ) -> None:
+        """Count all routed requests and abort blocked resource types."""
+
+        def handle_route(route: Any) -> None:
+            request_stats["total"] += 1
+            resource_type = cls._resource_type_for_route(route)
+
+            if resource_type in block_resource_types:
+                request_stats["blocked"] += 1
+                route.abort()
+                return
+
+            route.continue_()
+
+        context.route("**/*", handle_route)
+
+    @staticmethod
+    def _resource_type_for_route(route: Any) -> str:
+        """Read Playwright's request.resource_type from a route object."""
+        request = getattr(route, "request", None)
+        resource_type = getattr(request, "resource_type", "")
+
+        if callable(resource_type):
+            resource_type = resource_type()
+
+        return str(resource_type).lower()
 
     @staticmethod
     def _close_context(context: Optional[Any]) -> None:
