@@ -3,6 +3,7 @@ from .event_logger import EventLogger, summarize
 from .fetcher import FetchResult, HttpFetcher, RenderFetcher, RenderResult
 from .domain_rate_limiter import DomainRateLimiter
 from .parser import HTMLParser, ParsedPage
+from .render_decision import RenderDecision, RenderDecisionEngine, RenderDecisionName
 from .robot_txt_checker import (
     RobotTxtChecker,
     RobotTxTChecker,
@@ -27,6 +28,9 @@ __all__ = [
     "HttpFetcher",
     "JsonlItemWriter",
     "ParsedPage",
+    "RenderDecision",
+    "RenderDecisionEngine",
+    "RenderDecisionName",
     "RobotTxtChecker",
     "RobotTxTChecker",
     "RobotsGroup",
