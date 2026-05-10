@@ -1,6 +1,14 @@
 from .crawl_event import CrawlEvent
 from .event_logger import EventLogger, summarize
-from .fetcher import FetchResult, HttpFetcher, RenderFetcher, RenderResult
+from .fetcher import (
+    ApiDiscoveryRecord,
+    ApiDiscoveryRenderFetcher,
+    ApiDiscoveryResult,
+    FetchResult,
+    HttpFetcher,
+    RenderFetcher,
+    RenderResult,
+)
 from .domain_rate_limiter import DomainRateLimiter
 from .parser import HTMLParser, ParsedPage
 from .render_decision import RenderDecision, RenderDecisionEngine, RenderDecisionName
@@ -23,6 +31,9 @@ __all__ = [
     "CrawlEvent",
     "DomainRateLimiter",
     "EventLogger",
+    "ApiDiscoveryRecord",
+    "ApiDiscoveryRenderFetcher",
+    "ApiDiscoveryResult",
     "FetchResult",
     "HTMLParser",
     "HttpFetcher",

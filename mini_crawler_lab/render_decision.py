@@ -136,7 +136,8 @@ class RenderDecisionEngine:
     def _static_html_has_enough_content(self, stats: "_HTMLSignals") -> bool:
         """Treat substantial text or navigational links as useful static HTML."""
         return stats.text_length >= self._RICH_TEXT_LIMIT or stats.link_count >= 5
-
+    
+    # 启发式的阈值设置，如果渲染后文本多 >= 100，或链接多 >= 3，就认为渲染有明显价值
     def _rendered_html_is_richer(
         self,
         static_stats: "_HTMLSignals",

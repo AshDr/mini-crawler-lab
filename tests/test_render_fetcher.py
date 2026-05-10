@@ -1,12 +1,29 @@
 from typing import Callable, Dict, List, Optional
 
-from mini_crawler_lab import RenderFetcher, RenderResult
+from mini_crawler_lab import (
+    ApiDiscoveryRecord,
+    ApiDiscoveryRenderFetcher,
+    ApiDiscoveryResult,
+    RenderFetcher,
+    RenderResult,
+)
 
 
 class FakeResponse:
-    def __init__(self, status: int = 200, headers: Optional[Dict[str, str]] = None):
+    def __init__(
+        self,
+        status: int = 200,
+        headers: Optional[Dict[str, str]] = None,
+        url: str = "https://example.com/",
+        text: str = "",
+    ):
         self.status = status
         self.headers = dict(headers or {})
+        self.url = url
+        self._text = text
+
+    def text(self) -> str:
+        return self._text
 
 
 class FakePage:
@@ -17,6 +34,7 @@ class FakePage:
         response: Optional[FakeResponse] = None,
         error: Optional[Exception] = None,
         request_resource_types: Optional[List[str]] = None,
+        response_events: Optional[List[FakeResponse]] = None,
     ):
         self.url = "about:blank"
         self.final_url = final_url
@@ -25,6 +43,8 @@ class FakePage:
         self.error = error
         self.context: Optional["FakeContext"] = None
         self.request_resource_types = request_resource_types or ["document"]
+        self.response_events = response_events or []
+        self.handlers: Dict[str, Callable[[FakeResponse], None]] = {}
         self.goto_calls = []
         self.wait_calls = []
 
@@ -44,8 +64,20 @@ class FakePage:
             for resource_type in self.request_resource_types:
                 self.context.dispatch_route(resource_type)
 
+        for response_event in self.response_events:
+            self.dispatch_event("response", response_event)
+
         self.url = self.final_url
         return self.response
+
+    def on(self, event_name: str, handler: Callable[[FakeResponse], None]) -> None:
+        self.handlers[event_name] = handler
+
+    def dispatch_event(self, event_name: str, payload: FakeResponse) -> None:
+        handler = self.handlers.get(event_name)
+
+        if handler is not None:
+            handler(payload)
 
     def wait_for_selector(self, selector: str, timeout: float) -> None:
         self.wait_calls.append({"selector": selector, "timeout": timeout})
@@ -256,3 +288,75 @@ def test_render_fetcher_close_closes_browser_and_playwright_once() -> None:
 
     assert browser.close_count == 1
     assert playwright.stop_count == 1
+
+
+def test_api_discovery_render_fetcher_collects_json_response_metadata() -> None:
+    page = FakePage(
+        final_url="https://example.com/products",
+        response=FakeResponse(200, {"content-type": "text/html"}),
+        response_events=[
+            FakeResponse(
+                200,
+                {"content-type": "application/json; charset=utf-8"},
+                "https://example.com/api/products",
+                '{"title":"Desk","price":199,"items":[1,2]}',
+            ),
+            FakeResponse(
+                204,
+                {"content-type": "text/plain"},
+                "https://example.com/api/ignored",
+                '{"name":"ignored"}',
+            ),
+        ],
+    )
+    fetcher = ApiDiscoveryRenderFetcher(browser=FakeBrowser([page]))
+
+    result = fetcher.fetch("https://example.com/products")
+
+    assert isinstance(result, ApiDiscoveryResult)
+    assert result.final_url == "https://example.com/products"
+    assert result.status_code == 200
+    assert result.error_type is None
+    assert result.elapsed_ms >= 0
+    assert result.discovered_apis == (
+        ApiDiscoveryRecord(
+            url="https://example.com/api/products",
+            status=200,
+            json_size=42,
+            top_level_keys=("title", "price", "items"),
+            candidate_api=True,
+        ),
+    )
+
+
+def test_api_discovery_render_fetcher_uses_per_fetch_keywords() -> None:
+    page = FakePage(
+        response=FakeResponse(),
+        response_events=[
+            FakeResponse(
+                200,
+                {"Content-Type": "application/json"},
+                "https://example.com/api/search",
+                '{"sku":"A-1"}',
+            ),
+        ],
+    )
+    fetcher = ApiDiscoveryRenderFetcher(
+        browser=FakeBrowser([page]),
+        candidate_keywords=["title"],
+    )
+
+    result = fetcher.fetch(
+        "https://example.com/",
+        candidate_keywords=["sku"],
+    )
+
+    assert result.discovered_apis == (
+        ApiDiscoveryRecord(
+            url="https://example.com/api/search",
+            status=200,
+            json_size=13,
+            top_level_keys=("sku",),
+            candidate_api=True,
+        ),
+    )
