@@ -5,6 +5,7 @@ from .fetcher import (
     ApiDiscoveryRenderFetcher,
     ApiDiscoveryResult,
     FetchResult,
+    FetchStrategy,
     HttpFetcher,
     RenderFetcher,
     RenderResult,
@@ -23,6 +24,7 @@ from .robot_txt_checker import (
     RobotsTxtNotFoundError,
 )
 from .seen_url_store import SeenUrlStore
+from .site_profile import FetchMode, ProfileStore, RenderPolicy, SiteProfile
 from .sqlite_url_frontier import SQLiteUrlFrontier
 from .url_normalizer import URLNormalizer
 from .writer import JsonlItemWriter
@@ -31,10 +33,12 @@ __all__ = [
     "CrawlEvent",
     "DomainRateLimiter",
     "EventLogger",
+    "FetchMode",
     "ApiDiscoveryRecord",
     "ApiDiscoveryRenderFetcher",
     "ApiDiscoveryResult",
     "FetchResult",
+    "FetchStrategy",
     "HTMLParser",
     "HttpFetcher",
     "JsonlItemWriter",
@@ -42,6 +46,7 @@ __all__ = [
     "RenderDecision",
     "RenderDecisionEngine",
     "RenderDecisionName",
+    "RenderPolicy",
     "RobotTxtChecker",
     "RobotTxTChecker",
     "RobotsGroup",
@@ -52,7 +57,9 @@ __all__ = [
     "RobotsTxtNotFoundError",
     "RenderFetcher",
     "RenderResult",
+    "ProfileStore",
     "SeenUrlStore",
+    "SiteProfile",
     "SQLiteUrlFrontier",
     "URLNormalizer",
     "summarize",

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
+
+
+ActualFetchMode = Literal["http", "render"]
 
 
 @dataclass(frozen=True)
 class FetchResult:
-    """Result returned by an HTTP fetch attempt."""
+    """Unified result returned by an HTTP or rendered fetch attempt."""
 
     url: str
     final_url: Optional[str]
@@ -15,6 +18,7 @@ class FetchResult:
     text: Optional[str]
     elapsed_ms: float
     error_type: Optional[str]
+    fetch_mode: ActualFetchMode = "http"
 
 
 @dataclass(frozen=True)

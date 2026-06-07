@@ -1,0 +1,2 @@
+# Add one absolute HTTP(S) seed URL per line.
+https://books.toscrape.com/

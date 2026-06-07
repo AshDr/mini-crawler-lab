@@ -1,0 +1,8 @@
+profiles:
+  - domain: books.toscrape.com
+    default_fetch_mode: http
+    max_rps: 3.0
+    js_required_patterns:
+    api_patterns:
+    render_policy: auto
+    last_verified: 2026-06-07
